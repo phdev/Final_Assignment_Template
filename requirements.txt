@@ -1,2 +1,14 @@
 gradio
 requests
+langgraph
+langchain
+langchain-core
+langchain-openai
+langsmith
+langfuse
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-requests
+python-dotenv
+tenacity
