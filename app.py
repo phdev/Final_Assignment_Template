@@ -4,24 +4,19 @@ import requests
 import inspect
 import pandas as pd
 
+# Agent entrypoint (LangGraph) + observability hooks are inside this package.
+from agent.run import answer as agent_answer
+
 # (Keep Constants as is)
 # --- Constants ---
 DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 
-# --- Basic Agent Definition ---
-# ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
-class BasicAgent:
-    def __init__(self):
-        print("BasicAgent initialized.")
-    def __call__(self, question: str) -> str:
-        print(f"Agent received question (first 50 chars): {question[:50]}...")
-        fixed_answer = "This is a default answer."
-        print(f"Agent returning fixed answer: {fixed_answer}")
-        return fixed_answer
+IN_SPACE = bool(os.getenv("SPACE_ID") or os.getenv("SPACE_HOST"))
 
-def run_and_submit_all( profile: gr.OAuthProfile | None):
+
+def run_and_submit_all(profile: gr.OAuthProfile | None = None):
     """
-    Fetches all questions, runs the BasicAgent on them, submits all answers,
+    Fetches all questions, runs the agent on them, submits all answers,
     and displays the results.
     """
     # --- Determine HF Space Runtime URL and Repo URL ---
@@ -31,19 +26,19 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
         username= f"{profile.username}"
         print(f"User logged in: {username}")
     else:
-        print("User not logged in.")
-        return "Please Login to Hugging Face with the button.", None
+        username = os.getenv("HF_USERNAME", "").strip()
+        if username:
+            print(f"Using HF_USERNAME from env: {username}")
+        else:
+            print("User not logged in (and HF_USERNAME not set).")
+            return "Please Login to Hugging Face (or set HF_USERNAME env var for local runs).", None
 
     api_url = DEFAULT_API_URL
     questions_url = f"{api_url}/questions"
     submit_url = f"{api_url}/submit"
 
-    # 1. Instantiate Agent ( modify this part to create your agent)
-    try:
-        agent = BasicAgent()
-    except Exception as e:
-        print(f"Error instantiating agent: {e}")
-        return f"Error initializing agent: {e}", None
+    # 1. Agent is imported from `agent/` (LangGraph).
+    # If the model/provider is not configured, `agent_answer` will raise and we'll show the error.
     # In the case of an app running as a hugging Face space, this link points toward your codebase ( usefull for others so please keep it public)
     agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main"
     print(agent_code)
@@ -80,7 +75,16 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
             print(f"Skipping item with missing task_id or question: {item}")
             continue
         try:
-            submitted_answer = agent(question_text)
+            submitted_answer = agent_answer(
+                question_text,
+                metadata={
+                    "task_id": task_id,
+                    "username": username.strip(),
+                    "space_id": space_id,
+                    "model": os.getenv("MODEL_NAME", ""),
+                },
+                tags=["hf-agents-course-unit4"],
+            )
             answers_payload.append({"task_id": task_id, "submitted_answer": submitted_answer})
             results_log.append({"Task ID": task_id, "Question": question_text, "Submitted Answer": submitted_answer})
         except Exception as e:
@@ -158,7 +162,12 @@ with gr.Blocks() as demo:
         """
     )
 
-    gr.LoginButton()
+    if IN_SPACE:
+        gr.LoginButton()
+    else:
+        gr.Markdown(
+            "Local run detected (not a Space). Set `HF_USERNAME` to enable submission without OAuth."
+        )
 
     run_button = gr.Button("Run Evaluation & Submit All Answers")
 
