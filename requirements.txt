@@ -1,5 +1,6 @@
-gradio
+gradio[oauth]
 requests
+pandas
 langgraph
 langchain
 langchain-core
